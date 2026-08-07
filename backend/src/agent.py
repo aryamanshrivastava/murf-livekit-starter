@@ -9,25 +9,26 @@ from livekit.agents import (
     JobContext,
     JobProcess,
     cli,
-    inference,
-    tokenize,
     room_io,
+    tokenize,
 )
-from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
+
+try:
+    from .agent_prompt import AGENT_NAME, get_system_prompt
+except ImportError:
+    from agent_prompt import AGENT_NAME, get_system_prompt
+
+from livekit.plugins import deepgram, google, murf, noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("agent")
 
 load_dotenv(".env.local")
 
-# Change this prompt to change what your voice agent does.
-# This prompt is tuned for Indian artisans, street vendors, and MSMEs.
-SYSTEM_PROMPT = """You are a friendly and respectful voice assistant for Indian artisans, street vendors, and small shop owners. Speak in simple Indian English with clear spoken rhythm. Use words like bhaiya, kirana, kaari, khata, udhaar, bazaar, and munafa when it fits. Keep sentences short and direct. When listing items, say First item, Second item, and so on. Help with product details, customer orders, pricing, and payment confirmation. Always give exact prices and exact totals. If you do not know something, say so honestly and offer to escalate. Do not use complex punctuation, emojis, or symbols."""
-
 
 class Assistant(Agent):
     def __init__(self) -> None:
-        super().__init__(instructions=SYSTEM_PROMPT)
+        super().__init__(instructions=get_system_prompt())
 
     # To add tools, use the @function_tool decorator.
     # Here's an example that adds a simple weather tool.
@@ -57,7 +58,7 @@ def prewarm(proc: JobProcess):
 server.setup_fnc = prewarm
 
 
-@server.rtc_session(agent_name="my-agent")
+@server.rtc_session(agent_name=AGENT_NAME)
 async def my_agent(ctx: JobContext):
     # Logging setup
     # Add any other context you want in all log entries here

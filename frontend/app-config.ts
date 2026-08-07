@@ -33,9 +33,10 @@ export interface AppConfig {
 }
 
 export const APP_CONFIG_DEFAULTS: AppConfig = {
-  companyName: 'Bazaar Dost',
-  pageTitle: 'Bazaar Dost',
-  pageDescription: 'Voice assistant for kirana, artisan stalls, and small shops. Manage stock, orders, khata, and payment quickly.',
+  companyName: 'Daily Bazaar',
+  pageTitle: 'Daily Bazaar - Voice Assistant',
+  pageDescription:
+    'Voice assistant for kirana, artisan stalls, and small shops. Manage stock, orders, khata, and payment quickly.',
 
   supportsChatInput: true,
   supportsVideoInput: true,
