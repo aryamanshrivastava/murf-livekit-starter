@@ -34,9 +34,9 @@ export interface AppConfig {
 
 export const APP_CONFIG_DEFAULTS: AppConfig = {
   companyName: 'Daily Bazaar',
-  pageTitle: 'Daily Bazaar - Voice Assistant',
+  pageTitle: 'Priya - Daily Bazaar Voice Helper',
   pageDescription:
-    'Voice assistant for kirana, artisan stalls, and small shops. Manage stock, orders, khata, and payment quickly.',
+    'Voice assistant for kirana stores, artisan stalls, and small shops. Manage stock, orders, khata, and payments via voice.',
 
   supportsChatInput: true,
   supportsVideoInput: true,
@@ -47,7 +47,7 @@ export const APP_CONFIG_DEFAULTS: AppConfig = {
   accent: '#d97706',
   logoDark: '/murf-logo-dark.svg',
   accentDark: '#f59e0b',
-  startButtonText: 'Start voice helper',
+  startButtonText: 'Start Voice Helper',
 
   // optional: audio visualization configuration
   // audioVisualizerType: 'bar',
