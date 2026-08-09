@@ -94,7 +94,13 @@ async def my_agent(ctx: JobContext):
         "room": ctx.room.name,
     }
 
-    await ctx.connect()
+    logger.info(">>> before ctx.connect")
+    try:
+        await ctx.connect()
+        logger.info(">>> ctx.connect succeeded")
+    except Exception:
+        logger.exception(">>> ctx.connect failed")
+        raise
 
     session = AgentSession(
         stt=deepgram.STT(model="nova-3", language="multi"),
