@@ -2,6 +2,7 @@ import pytest
 from livekit.agents import AgentSession, inference, llm
 
 from agent import Assistant
+from agent_prompt import get_system_prompt
 
 
 def _llm() -> llm.LLM:
@@ -14,6 +15,15 @@ def _consume_tool_calls_if_any(result):
         if result.events and type(result.events[0]).__name__ == "FunctionCallEvent":
             result.expect.next_event().is_function_call()
             result.expect.next_event().is_function_call_output()
+
+
+def test_prompt_guides_new_and_returning_seller_flow() -> None:
+    prompt = get_system_prompt().lower()
+
+    assert "ask for their shop name or seller id before offering help" in prompt
+    assert "ask only one question at a time" in prompt
+    assert "preferred delivery slot" in prompt
+    assert "welcome them back naturally" in prompt
 
 
 @pytest.mark.asyncio

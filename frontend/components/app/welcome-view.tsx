@@ -43,7 +43,7 @@ export function WelcomeView({
         </div>
 
         <h1 className="text-foreground text-2xl font-bold tracking-tight sm:text-3xl">
-          Priya - Daily Bazaar
+          Daily Bazaar
         </h1>
         <p className="text-muted-foreground mt-1 text-xs font-semibold tracking-wider uppercase">
           Voice Helper for Kirana & Small Shops

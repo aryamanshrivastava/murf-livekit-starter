@@ -34,7 +34,7 @@ export interface AppConfig {
 
 export const APP_CONFIG_DEFAULTS: AppConfig = {
   companyName: 'Daily Bazaar',
-  pageTitle: 'Priya - Daily Bazaar Voice Helper',
+  pageTitle: 'Daily Bazaar AI',
   pageDescription:
     'Voice assistant for kirana stores, artisan stalls, and small shops. Manage stock, orders, khata, and payments via voice.',
 
