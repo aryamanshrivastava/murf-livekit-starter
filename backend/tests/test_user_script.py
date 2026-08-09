@@ -1,5 +1,7 @@
 import asyncio
+
 from livekit.agents import AgentSession, inference, llm
+
 from agent import Assistant
 from db import DEFAULT_DB_PATH, init_db, lookup_seller_db
 

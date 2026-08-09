@@ -130,4 +130,3 @@ def get_system_prompt() -> str:
         f"4. Mirror the user's language register, respect guardrails strictly, and output clean plain text suitable for speech."
     )
     return prompt
-

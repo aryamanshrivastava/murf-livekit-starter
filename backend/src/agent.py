@@ -2,7 +2,6 @@ import json
 import logging
 
 from dotenv import load_dotenv
-from livekit import rtc
 from livekit.agents import (
     Agent,
     AgentServer,
@@ -12,7 +11,6 @@ from livekit.agents import (
     RunContext,
     cli,
     function_tool,
-    room_io,
     tokenize,
 )
 
@@ -23,7 +21,7 @@ except ImportError:
     from agent_prompt import AGENT_NAME, get_system_prompt
     from db import init_db, lookup_seller_db, save_seller_db
 
-from livekit.plugins import deepgram, google, murf, noise_cancellation, silero
+from livekit.plugins import deepgram, google, murf, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 logger = logging.getLogger("agent")
@@ -96,6 +94,8 @@ async def my_agent(ctx: JobContext):
         "room": ctx.room.name,
     }
 
+    await ctx.connect()
+
     session = AgentSession(
         stt=deepgram.STT(model="nova-3", language="multi"),
         llm=google.LLM(model="gemini-3.5-flash-lite"),
@@ -114,19 +114,7 @@ async def my_agent(ctx: JobContext):
     await session.start(
         agent=Assistant(),
         room=ctx.room,
-        room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(
-                noise_cancellation=lambda params: (
-                    noise_cancellation.BVCTelephony()
-                    if params.participant.kind
-                    == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
-                    else noise_cancellation.BVC()
-                ),
-            ),
-        ),
     )
-
-    await ctx.connect()
 
 
 if __name__ == "__main__":
