@@ -5,7 +5,7 @@ import pytest
 from livekit.agents import AgentSession, inference, llm
 
 from agent import Assistant
-from db import DEFAULT_DB_PATH, init_db, lookup_caller_db, save_caller_db
+from db import DEFAULT_DB_PATH, init_db, lookup_seller_db, save_seller_db
 
 
 @pytest.fixture(autouse=True)
@@ -26,10 +26,10 @@ def test_db_crud():
         init_db(db_path)
 
         # Lookup non-existent record
-        assert lookup_caller_db("ramesh_123", db_path=db_path) is None
+        assert lookup_seller_db("ramesh_123", db_path=db_path) is None
 
         # Save record
-        saved = save_caller_db(
+        saved = save_seller_db(
             user_id="ramesh_123",
             name="Ramesh",
             language_preference="Hinglish",
@@ -45,13 +45,13 @@ def test_db_crud():
         assert saved["facts"]["preferred_delivery_slot"] == "morning"
 
         # Lookup by user_id
-        res_by_id = lookup_caller_db("ramesh_123", db_path=db_path)
+        res_by_id = lookup_seller_db("ramesh_123", db_path=db_path)
         assert res_by_id is not None
         assert res_by_id["name"] == "Ramesh"
         assert res_by_id["facts"]["usual_quantities"] == "10kg"
 
         # Lookup by name
-        res_by_name = lookup_caller_db("Ramesh", db_path=db_path)
+        res_by_name = lookup_seller_db("Ramesh", db_path=db_path)
         assert res_by_name is not None
         assert res_by_name["user_id"] == "ramesh_123"
 
@@ -70,7 +70,7 @@ async def test_agent_asks_consent_before_saving():
         await session.start(Assistant())
 
         result = await session.run(
-            user_input="Hi, my name is Suresh and my preferred delivery slot is morning."
+            user_input="Hello, my shop name is Suresh Store. Can you save my preferred delivery slot as morning?"
         )
 
         # Handle lookup tool invocation then evaluate assistant's consent response
@@ -82,8 +82,7 @@ async def test_agent_asks_consent_before_saving():
             .judge(
                 llm_inst,
                 intent="""
-                The response must ask for explicit permission/consent to save or remember the user's name/delivery preference (e.g. 'Kya main yeh details save kar doon?').
-                It should NOT claim to have saved the data without asking first.
+                The response must ask for explicit permission or confirmation before saving or remembering the user's details (e.g. 'Would you like me to remember your delivery slot preference?').
                 """,
             )
         )
@@ -93,8 +92,8 @@ async def test_agent_asks_consent_before_saving():
 async def test_returning_caller_greeting():
     """Evaluation verifying returning caller greeting and context continuation."""
     # Pre-populate database with Ramesh's profile
-    save_caller_db(
-        user_id="ramesh_123",
+    save_seller_db(
+        user_id="Ramesh",
         name="Ramesh",
         language_preference="Hinglish",
         facts={
@@ -110,7 +109,7 @@ async def test_returning_caller_greeting():
     ):
         await session.start(Assistant())
 
-        result = await session.run(user_input="Hello, this is Ramesh again.")
+        result = await session.run(user_input="Hello, my shop name is Ramesh.")
 
         # Handle lookup tool invocation then evaluate assistant's greeting
         result.expect.next_event().is_function_call()

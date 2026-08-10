@@ -1,0 +1,25 @@
+{
+  "last_updated": "2026-08-10 09:20",
+  "products": [
+    {
+      "name": "Maggi",
+      "price": 15,
+      "stock": 120
+    },
+    {
+      "name": "Amul Milk",
+      "price": 62,
+      "stock": 80
+    },
+    {
+      "name": "Fortune Oil",
+      "price": 170,
+      "stock": 42
+    },
+    {
+      "name": "Aashirvaad Atta",
+      "price": 340,
+      "stock": 25
+    }
+  ]
+}

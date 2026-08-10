@@ -227,6 +227,11 @@ STT is configured in `backend/src/agent.py` in the `AgentSession(stt=...)` call.
 
 Murf Falcon and LiveKit handle audio format internally. For advanced options, see [Murf API docs](https://murf.ai/api/docs) and [LiveKit docs](https://docs.livekit.io).
 
+### Catalogue & Dataset
+
+> [!NOTE]
+> The catalogue currently uses a locally maintained dataset for demonstration (`backend/data/catalogue.json`).
+
 ---
 
 ## Project Structure

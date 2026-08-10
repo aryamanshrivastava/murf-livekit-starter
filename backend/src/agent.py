@@ -16,9 +16,11 @@ from livekit.agents import (
 
 try:
     from .agent_prompt import AGENT_NAME, get_system_prompt
+    from .catalogue import calculate_order_total_data, lookup_product_data
     from .db import init_db, lookup_seller_db, save_seller_db
 except ImportError:
     from agent_prompt import AGENT_NAME, get_system_prompt
+    from catalogue import calculate_order_total_data, lookup_product_data
     from db import init_db, lookup_seller_db, save_seller_db
 
 from livekit.plugins import deepgram, google, murf, silero
@@ -75,6 +77,32 @@ class Assistant(Agent):
             facts=facts,
         )
         return f"Successfully saved record for {saved['name']} (ID: {saved['user_id']}). Facts: {saved['facts']}"
+
+    @function_tool
+    async def lookup_product(self, context: RunContext, product_name: str) -> str:
+        """Look up the latest available stock quantity and seller-approved price for a product in the Daily Bazaar catalogue.
+
+        Use this tool whenever the seller or caller asks about product stock, availability, price, or inventory.
+
+        Args:
+            product_name: The name of the product to look up (e.g. 'Maggi', 'Amul Milk').
+        """
+        logger.info(f"Looking up product: {product_name}")
+        res = lookup_product_data(product_name)
+        return json.dumps(res, indent=2)
+
+    @function_tool
+    async def calculate_order_total(self, context: RunContext, items: str) -> str:
+        """Calculate the total order value using seller-approved catalogue prices.
+
+        Use this tool whenever the seller or caller asks for total bill, total amount, order value, or invoice amount.
+
+        Args:
+            items: JSON list of item objects or tuples e.g. '[{"name": "Maggi", "qty": 5}, {"name": "Amul Milk", "qty": 2}]' or '[["Maggi", 5], ["Amul Milk", 2]]'.
+        """
+        logger.info(f"Calculating order total for items: {items}")
+        res = calculate_order_total_data(items)
+        return json.dumps(res, indent=2)
 
 
 server = AgentServer()
