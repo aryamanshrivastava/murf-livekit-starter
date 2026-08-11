@@ -232,6 +232,41 @@ Murf Falcon and LiveKit handle audio format internally. For advanced options, se
 > [!NOTE]
 > The catalogue currently uses a locally maintained dataset for demonstration (`backend/data/catalogue.json`).
 
+### Outbound Voice Calling & Smart Inventory Trigger
+
+> [!TIP]
+> **Trigger Logic**: Inventory coverage is calculated as `coverage_days = remaining_stock / daily_sales_rate`. When `coverage < 1.0` (e.g. 12 Maggi packets remaining at 20 sales/day = 0.6 days of stock), an outbound low-stock reminder call is automatically dispatched.
+
+#### Twilio + LiveKit SIP Outbound Integration
+
+**Architecture**:
+```text
+Twilio Outbound Call  --->  TwiML Stream (<Stream url="wss://your-livekit-server"/>)  --->  LiveKit Agent (Priya)
+```
+
+**Environment Variables** (in `backend/.env.local`):
+```env
+TWILIO_ACCOUNT_SID=your_account_sid
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_PHONE_NUMBER=+15005550006
+TWIML_URL=https://your-server.com/twiml
+```
+
+**TwiML Endpoint** (`/twiml` route):
+```xml
+<Response>
+  <Say>Connecting you to Priya from Daily Bazaar.</Say>
+  <Connect>
+    <Stream url="wss://your-livekit-server"/>
+  </Connect>
+</Response>
+```
+
+**Trigger Command**:
+```bash
+cd backend && uv run python src/outbound_trigger.py --phone +919876543210 --threshold 1.0
+```
+
 ---
 
 ## Project Structure

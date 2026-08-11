@@ -1,3 +1,4 @@
+import contextlib
 import json
 import sqlite3
 from collections.abc import Generator
@@ -32,10 +33,14 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 name TEXT NOT NULL,
                 language_preference TEXT DEFAULT 'Hinglish',
                 facts TEXT DEFAULT '{}',
+                phone TEXT,
                 last_interaction TEXT NOT NULL
             )
             """
         )
+        # Migration guard: add phone column if it doesn't exist yet
+        with contextlib.suppress(Exception):
+            conn.execute("ALTER TABLE callers ADD COLUMN phone TEXT")
 
 
 def lookup_seller_db(
@@ -66,6 +71,7 @@ def lookup_seller_db(
             "name": row["name"],
             "language_preference": row["language_preference"],
             "facts": facts_dict,
+            "phone": row["phone"],
             "last_interaction": row["last_interaction"],
         }
 
@@ -75,6 +81,7 @@ def save_seller_db(
     name: str,
     language_preference: str = "Hinglish",
     facts: Optional[Union[dict[str, Any], str]] = None,
+    phone: Optional[str] = None,
     last_interaction: Optional[str] = None,
     db_path: Optional[Path] = None,
 ) -> dict[str, Any]:
@@ -102,15 +109,16 @@ def save_seller_db(
     with get_db(db_path) as conn, conn:
         conn.execute(
             """
-            INSERT INTO callers (user_id, name, language_preference, facts, last_interaction)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO callers (user_id, name, language_preference, facts, phone, last_interaction)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
                 name=excluded.name,
                 language_preference=COALESCE(excluded.language_preference, callers.language_preference),
                 facts=excluded.facts,
+                phone=COALESCE(excluded.phone, callers.phone),
                 last_interaction=excluded.last_interaction
             """,
-            (user_id, name, language_preference, facts_json, now_iso),
+            (user_id, name, language_preference, facts_json, phone, now_iso),
         )
 
     return {
@@ -118,6 +126,7 @@ def save_seller_db(
         "name": name,
         "language_preference": language_preference,
         "facts": parsed_facts,
+        "phone": phone,
         "last_interaction": now_iso,
     }
 

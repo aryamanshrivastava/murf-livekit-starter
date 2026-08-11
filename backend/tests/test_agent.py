@@ -47,9 +47,16 @@ async def test_offers_assistance() -> None:
                 intent="""
                 Greets the user in a friendly manner.
 
-                Optional context that may or may not be included:
-                - Offer of assistance with any request the user may have
-                - Other small talk or chit chat is acceptable, so long as it is friendly and not too intrusive
+                Acceptable responses include any combination of:
+                - A warm greeting (e.g. Namaste, Hello, Hi)
+                - Introducing themselves as Priya from Daily Bazaar
+                - Asking for the user's shop name to pull up their profile
+                  (this is the expected first-turn behaviour and counts as friendly)
+                - Offering to help with business tasks
+                - Brief small talk, so long as it is not intrusive
+
+                The response does NOT need to explicitly offer assistance;
+                asking for the shop name is sufficient to pass.
                 """,
             )
         )

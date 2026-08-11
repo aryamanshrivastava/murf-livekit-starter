@@ -73,6 +73,11 @@ async def test_agent_asks_consent_before_saving():
             user_input="Hello, my shop name is Suresh Store. Can you save my preferred delivery slot as morning?"
         )
 
+        # Agent may acknowledge the request before calling the tool ("Let me check your profile first...").
+        # Consume any leading chat message so the function call assertion is always on the right event.
+        if result.events and type(result.events[0]).__name__ == "ChatMessageEvent":
+            result.expect.next_event().is_message(role="assistant")
+
         # Handle lookup tool invocation then evaluate assistant's consent response
         result.expect.next_event().is_function_call()
         result.expect.next_event().is_function_call_output()
@@ -120,7 +125,14 @@ async def test_returning_caller_greeting():
             .judge(
                 llm_inst,
                 intent="""
-                Greets Ramesh by name (e.g. 'Namaste Ramesh' or 'Welcome back Ramesh') and references past context such as past orders (cotton seeds), delivery slot (morning), or asks how to assist today.
+                Greets Ramesh by name (e.g. 'Namaste Ramesh' or 'Welcome back Ramesh') AND
+                references at least one piece of their stored context, such as:
+                - Past orders (cotton seeds or 5kg cotton seeds)
+                - Preferred delivery slot (morning)
+                - Usual quantities (5kg)
+
+                Simply greeting by name without mentioning any stored context does NOT pass.
+                The agent must demonstrate it has read and used the profile facts.
                 """,
             )
         )
