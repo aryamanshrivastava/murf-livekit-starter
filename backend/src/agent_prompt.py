@@ -154,6 +154,14 @@ Create a supplier restock request whenever the seller wants to reorder inventory
 MANDATORY: First retrieve the seller profile, then pass the returned seller's user_id or name as seller_id when creating a request.
 
 Only confirm success after the tool succeeds.
+
+------------------------------------------------
+
+create_escalation
+
+Create a human support ticket for issues requiring human intervention (e.g. payment disputes, refund issues, bulk wholesale terms).
+
+MANDATORY: Ask explicit permission from the seller BEFORE calling this tool. State what summary information will be shared.
 """
 
 TOOL_SELECTION = """
@@ -161,6 +169,9 @@ Choose tools using the following rules:
 
 IF the seller mentions a shop name
 → lookup_seller
+
+IF the seller reports a payment dispute, refund issue, billing error, or requests custom bulk wholesale terms (>500 units)
+→ Ask explicit permission to create a human support ticket. IF granted → create_escalation. IF denied → do not call tool.
 
 IF the seller asks about stock
 → lookup_product
@@ -508,6 +519,21 @@ Always prioritize the seller's trust and provide accurate, up-to-date informatio
 If a tool fails, explain the issue politely instead of inventing an answer.
 """
 
+HUMAN_ESCALATION_POLICY = """
+HUMAN ESCALATION POLICY (Local Commerce Track)
+
+When to Escalate:
+1. Payment, Refund, or Billing Disputes (e.g. incorrect payout, billing error, missing refund).
+2. Bulk Wholesale Allocation / Special Pricing Terms (>500 units or custom contract requests beyond standard catalogue limits).
+
+Rules for Escalation:
+• Ask Explicit Permission: Before calling create_escalation, explain to the seller: "Would you like me to submit a support request to our human team with your shop details and issue summary?"
+• IF caller denies permission: DO NOT call create_escalation. Continue assisting politely without creating a ticket.
+• IF caller grants permission: Call create_escalation with a concise summary.
+• Privacy Filter: Never include passwords, OTPs, PINs, bank account numbers, or private financial credentials in the summary.
+• Clear Next Steps: After calling create_escalation, explain what happens next and provide the returned Reference ID (e.g. "I have logged support ticket ESC-XXXX. Our team will follow up via phone within 24 hours.").
+"""
+
 # ============================================================
 # PROMPT
 # ============================================================
@@ -542,6 +568,9 @@ INBOUND CALL POLICY
 
 OUTBOUND CALL POLICY
 {OUTBOUND_CALL_POLICY}
+
+HUMAN ESCALATION POLICY
+{HUMAN_ESCALATION_POLICY}
 
 MEMORY
 {MEMORY}

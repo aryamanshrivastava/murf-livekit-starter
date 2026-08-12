@@ -84,6 +84,13 @@ export function WelcomeView({
             <p className="text-muted-foreground mt-3 text-xs">
               Tap above to speak with Priya in English, Hindi, or Hinglish
             </p>
+
+            <a
+              href="/escalations"
+              className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold text-amber-600 transition-all hover:bg-amber-500/20 dark:text-amber-400"
+            >
+              View Escalation Dashboard →
+            </a>
           </div>
         )}
       </div>

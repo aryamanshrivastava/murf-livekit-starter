@@ -23,8 +23,31 @@ def get_db(db_path: Optional[Path] = None) -> Generator[sqlite3.Connection, None
         conn.close()
 
 
+def init_escalation_table(db_path: Optional[Path] = None) -> None:
+    """Initialize the escalation_requests table in SQLite."""
+    with get_db(db_path) as conn, conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS escalation_requests (
+                escalation_id TEXT PRIMARY KEY,
+                seller_id TEXT NOT NULL,
+                seller_name TEXT NOT NULL,
+                contact_phone TEXT,
+                category TEXT NOT NULL,
+                issue_summary TEXT NOT NULL,
+                agent_findings TEXT DEFAULT '',
+                urgency_level TEXT DEFAULT 'MEDIUM',
+                language TEXT DEFAULT 'Hinglish',
+                contact_method TEXT DEFAULT 'phone',
+                status TEXT DEFAULT 'OPEN',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+
 def init_db(db_path: Optional[Path] = None) -> None:
-    """Initialize SQLite database table for sellers if it does not exist."""
+    """Initialize SQLite database tables for sellers and escalations if they do not exist."""
     with get_db(db_path) as conn, conn:
         conn.execute(
             """
@@ -41,6 +64,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
         # Migration guard: add phone column if it doesn't exist yet
         with contextlib.suppress(Exception):
             conn.execute("ALTER TABLE callers ADD COLUMN phone TEXT")
+    init_escalation_table(db_path)
 
 
 def lookup_seller_db(
@@ -129,6 +153,90 @@ def save_seller_db(
         "phone": phone,
         "last_interaction": now_iso,
     }
+
+
+def create_escalation_request_db(
+    seller_id: str,
+    seller_name: str,
+    category: str,
+    issue_summary: str,
+    agent_findings: str = "",
+    urgency_level: str = "MEDIUM",
+    language: str = "Hinglish",
+    contact_method: str = "phone",
+    contact_phone: Optional[str] = None,
+    db_path: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Save a human escalation/support ticket to SQLite database."""
+    import uuid
+
+    target_path = db_path or DEFAULT_DB_PATH
+    init_escalation_table(target_path)
+
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    date_str = now_dt.strftime("%Y%m%d")
+    esc_id = f"ESC-{date_str}-{uuid.uuid4().hex[:8].upper()}"
+
+    with get_db(target_path) as conn, conn:
+        conn.execute(
+            """
+            INSERT INTO escalation_requests (
+                escalation_id, seller_id, seller_name, contact_phone,
+                category, issue_summary, agent_findings, urgency_level,
+                language, contact_method, status, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)
+            """,
+            (
+                esc_id,
+                seller_id,
+                seller_name,
+                contact_phone,
+                category,
+                issue_summary,
+                agent_findings,
+                urgency_level,
+                language,
+                contact_method,
+                now_iso,
+            ),
+        )
+
+    return {
+        "escalation_id": esc_id,
+        "seller_id": seller_id,
+        "seller_name": seller_name,
+        "contact_phone": contact_phone,
+        "category": category,
+        "issue_summary": issue_summary,
+        "agent_findings": agent_findings,
+        "urgency_level": urgency_level,
+        "language": language,
+        "contact_method": contact_method,
+        "status": "OPEN",
+        "created_at": now_iso,
+    }
+
+
+def get_escalation_requests_db(
+    seller_id: Optional[str] = None, db_path: Optional[Path] = None
+) -> list[dict[str, Any]]:
+    """Retrieve open or past escalation tickets from SQLite database."""
+    target_path = db_path or DEFAULT_DB_PATH
+    init_escalation_table(target_path)
+
+    with get_db(target_path) as conn:
+        cursor = conn.cursor()
+        if seller_id:
+            cursor.execute(
+                "SELECT * FROM escalation_requests WHERE seller_id = ? ORDER BY created_at DESC",
+                (seller_id,),
+            )
+        else:
+            cursor.execute("SELECT * FROM escalation_requests ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
 
 
 # Aliases for compatibility

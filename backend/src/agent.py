@@ -20,12 +20,22 @@ from livekit.agents import (
 try:
     from .agent_prompt import AGENT_NAME, get_system_prompt
     from .catalogue import calculate_order_total_data, lookup_product_data
-    from .db import init_db, lookup_seller_db, save_seller_db
+    from .db import (
+        create_escalation_request_db,
+        init_db,
+        lookup_seller_db,
+        save_seller_db,
+    )
     from .inventory import create_restock_request_db
 except ImportError:
     from agent_prompt import AGENT_NAME, get_system_prompt
     from catalogue import calculate_order_total_data, lookup_product_data
-    from db import init_db, lookup_seller_db, save_seller_db
+    from db import (
+        create_escalation_request_db,
+        init_db,
+        lookup_seller_db,
+        save_seller_db,
+    )
     from inventory import create_restock_request_db
 
 from livekit.plugins import deepgram, google, murf, silero
@@ -346,6 +356,121 @@ class Assistant(Agent):
             )
             return tool_error(
                 f"Unable to create restock request for '{product_name}'. Please try again in a few moments."
+            )
+
+    @function_tool
+    @log_execution_time
+    async def create_escalation(
+        self,
+        context: RunContext,
+        seller_id: str,
+        category: str,
+        issue_summary: str,
+        agent_findings: str = "",
+        urgency_level: str = "MEDIUM",
+        contact_method: str = "phone",
+    ) -> dict[str, Any]:
+        """Create a human escalation support ticket for seller issues.
+
+        MANDATORY: Ask explicit permission from the seller BEFORE calling this tool.
+        Do NOT include passwords, OTPs, PINs, or private financial credentials in the summary.
+
+        Args:
+            seller_id: Seller ID or shop name (e.g. 'Instacart').
+            category: Category of escalation ('Payment Dispute', 'Refund Issue', 'Wholesale Bulk Terms', or 'Order Dispute').
+            issue_summary: Concise 1-2 sentence description of what happened.
+            agent_findings: What the agent or catalogue lookup already verified.
+            urgency_level: 'LOW', 'MEDIUM', 'HIGH', or 'CRITICAL'.
+            contact_method: Preferred follow-up method (e.g. 'phone', 'whatsapp', 'email').
+        """
+        # Fallback to cached seller_id if empty
+        if not seller_id:
+            try:
+                if hasattr(context, "session") and hasattr(context.session, "state"):
+                    seller_state = context.session.state.get("seller", {})
+                    seller_id = seller_state.get("user_id") or seller_state.get(
+                        "name", ""
+                    )
+            except Exception as e:
+                logger.warning("Unable to retrieve cached seller profile: %s", e)
+
+        if not seller_id:
+            return tool_error(ERR_MISSING_SHOP)
+
+        seller_name = seller_id
+        contact_phone = None
+        try:
+            if hasattr(context, "session") and hasattr(context.session, "state"):
+                seller_state = context.session.state.get("seller", {})
+                if isinstance(seller_state, dict):
+                    seller_name = seller_state.get("name", seller_id)
+                    contact_phone = seller_state.get("phone")
+        except Exception:
+            pass
+
+        text_lower = f"{category} {issue_summary}".lower()
+        if any(
+            w in text_lower
+            for w in ["payment", "payout", "refund", "billing", "dispute", "money"]
+        ):
+            urgency_level = "CRITICAL"
+        elif any(
+            w in text_lower
+            for w in [
+                "delivery",
+                "shipping",
+                "courier",
+                "delayed",
+                "delay",
+                "logistics",
+                "package",
+                "dispatch",
+            ]
+        ):
+            urgency_level = "HIGH"
+        elif urgency_level not in ["CRITICAL", "HIGH", "LOW"]:
+            urgency_level = "MEDIUM"
+
+        logger.info(
+            "Creating human escalation ticket for %s: %s (%s)",
+            seller_id,
+            category,
+            issue_summary,
+            extra={
+                "seller_id": seller_id,
+                "category": category,
+                "urgency": urgency_level,
+            },
+        )
+
+        try:
+            res = create_escalation_request_db(
+                seller_id=seller_id,
+                seller_name=seller_name,
+                category=category,
+                issue_summary=issue_summary,
+                agent_findings=agent_findings,
+                urgency_level=urgency_level,
+                contact_method=contact_method,
+                contact_phone=contact_phone,
+            )
+
+            if not res or not isinstance(res, dict):
+                return tool_error("Unable to create human support request.")
+
+            return {
+                "success": True,
+                "escalation_id": res["escalation_id"],
+                "status": "OPEN",
+                "message": f"Support request created with Reference ID: {res['escalation_id']}.",
+                "details": res,
+            }
+        except Exception:
+            logger.exception(
+                "Failed to create escalation ticket", extra={"seller_id": seller_id}
+            )
+            return tool_error(
+                "Unable to create support request. Please try again in a few moments."
             )
 
 

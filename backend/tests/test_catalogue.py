@@ -47,7 +47,9 @@ async def test_agent_catalogue_dialogue_flow():
     # can proceed past the seller identification gate to call lookup_product.
     from db import save_seller_db
 
-    save_seller_db(user_id="Instacart", name="Instacart", language_preference="Hinglish")
+    save_seller_db(
+        user_id="Instacart", name="Instacart", language_preference="Hinglish"
+    )
 
     async with AgentSession(llm=llm) as session:
         await session.start(Assistant())
