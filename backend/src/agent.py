@@ -2,7 +2,9 @@ import functools
 import json
 import logging
 import time
+import uuid
 from typing import Any, Optional
+
 
 from dotenv import load_dotenv
 from livekit.agents import (
@@ -17,13 +19,17 @@ from livekit.agents import (
     tokenize,
 )
 
+from datetime import datetime, timezone
+
 try:
     from .agent_prompt import AGENT_NAME, get_system_prompt
     from .catalogue import calculate_order_total_data, lookup_product_data
     from .db import (
         create_escalation_request_db,
+        get_call_metrics_db,
         init_db,
         lookup_seller_db,
+        record_call_outcome_db,
         save_seller_db,
     )
     from .inventory import create_restock_request_db
@@ -32,11 +38,14 @@ except ImportError:
     from catalogue import calculate_order_total_data, lookup_product_data
     from db import (
         create_escalation_request_db,
+        get_call_metrics_db,
         init_db,
         lookup_seller_db,
+        record_call_outcome_db,
         save_seller_db,
     )
     from inventory import create_restock_request_db
+
 
 from livekit.plugins import deepgram, google, murf, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
@@ -109,6 +118,10 @@ class Assistant(Agent):
         self.product = product
         self.coverage_days = coverage_days
 
+        self.seller_identified: bool = False
+        self.business_action_completed: bool = False
+        self.active_seller_id: Optional[str] = seller_name
+
         super().__init__(instructions=get_system_prompt())
 
     @function_tool
@@ -123,6 +136,8 @@ class Assistant(Agent):
         Never assume a seller exists without calling this tool.
         """
         logger.info("Looking up seller: %s", name_or_id)
+        self.seller_identified = True
+        self.active_seller_id = name_or_id
 
         try:
             record = lookup_seller_db(name_or_id)
@@ -137,6 +152,9 @@ class Assistant(Agent):
                 }
 
             _cache_seller(context, record)
+            if isinstance(record, dict) and record.get("name"):
+                self.active_seller_id = record["name"]
+
 
             return {
                 "success": True,
@@ -225,6 +243,7 @@ class Assistant(Agent):
         )
         try:
             res = lookup_product_data(product_name)
+            self.business_action_completed = True
 
             if not res or not isinstance(res, dict):
                 return {
@@ -280,6 +299,7 @@ class Assistant(Agent):
         )
         try:
             res = calculate_order_total_data(items)
+            self.business_action_completed = True
 
             if not res or not isinstance(res, dict):
                 return tool_error("Unable to calculate order total.")
@@ -339,6 +359,7 @@ class Assistant(Agent):
                 quantity=quantity,
                 seller_id=seller_id,
             )
+            self.business_action_completed = True
 
             if not res or not isinstance(res, dict):
                 return tool_error(
@@ -454,6 +475,7 @@ class Assistant(Agent):
                 contact_method=contact_method,
                 contact_phone=contact_phone,
             )
+            self.business_action_completed = True
 
             if not res or not isinstance(res, dict):
                 return tool_error("Unable to create human support request.")
@@ -552,6 +574,67 @@ async def my_agent(ctx: JobContext):
         room=ctx.room,
     )
 
+    session_uid = uuid.uuid4().hex[:6].upper()
+    call_id = f"CALL-{ctx.room.name}-{session_uid}"
+    started_at_iso = datetime.now(timezone.utc).isoformat()
+    start_time_monotonic = time.monotonic()
+
+    def _save_outcome_now(reason_override: Optional[str] = None):
+        ended_at_iso = datetime.now(timezone.utc).isoformat()
+        duration_seconds = time.monotonic() - start_time_monotonic
+        seller_id = assistant.active_seller_id
+        if not seller_id and hasattr(session, "state") and isinstance(session.state, dict):
+            cached_seller = session.state.get("seller", {})
+            if isinstance(cached_seller, dict):
+                seller_id = cached_seller.get("name") or cached_seller.get("user_id")
+
+        is_success = (
+            assistant.seller_identified or assistant.outbound
+        ) and assistant.business_action_completed
+        outcome = "SUCCESS" if is_success else "FAILED"
+        reason = reason_override or (
+            "Caller identified shop and completed business inquiry/action"
+            if is_success
+            else (
+                "Call ended before shop identification or business inquiry completed"
+            )
+        )
+
+        logger.info(
+            "Recording call outcome immediately for %s: %s (seller=%s, duration=%.1fs)",
+            call_id,
+            outcome,
+            seller_id,
+            duration_seconds,
+        )
+        record_call_outcome_db(
+            call_id=call_id,
+            room_name=ctx.room.name,
+            seller_id=seller_id,
+            outbound=assistant.outbound,
+            outcome=outcome,
+            reason=reason,
+            started_at=started_at_iso,
+            ended_at=ended_at_iso,
+            duration_seconds=duration_seconds,
+        )
+
+    @ctx.room.on("participant_disconnected")
+    def _on_participant_disconnected(participant: Any):
+        logger.info("Participant %s disconnected from room %s, saving call outcome immediately", getattr(participant, "identity", "unknown"), ctx.room.name)
+        _save_outcome_now()
+
+    @ctx.room.on("disconnected")
+    def _on_room_disconnected():
+        logger.info("Room %s disconnected, saving call outcome immediately", ctx.room.name)
+        _save_outcome_now()
+
+    async def _on_session_disconnect():
+        _save_outcome_now()
+
+    ctx.add_shutdown_callback(_on_session_disconnect)
+
+
     if assistant.outbound:
         seller_str = assistant.seller_name or "there"
         prod_str = assistant.product or "your inventory item"
@@ -586,6 +669,7 @@ Before we get started, could you please tell me your shop name so I can access y
         ctx.room.name,
         extra={"room": ctx.room.name},
     )
+
 
 
 if __name__ == "__main__":

@@ -157,15 +157,29 @@ export function EscalationDashboard({ onBackToAgent }: EscalationDashboardProps)
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {onBackToAgent && (
+        <div className="flex flex-wrap items-center gap-3">
+          {onBackToAgent ? (
             <button
               onClick={onBackToAgent}
               className="border-border/60 bg-muted/40 text-foreground hover:bg-muted inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all"
             >
               ← Return to Agent
             </button>
+          ) : (
+            <a
+              href="/"
+              className="border-border/60 bg-muted/40 text-foreground hover:bg-muted inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all"
+            >
+              ← Return to Home
+            </a>
           )}
+
+          <a
+            href="/dashboard"
+            className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all"
+          >
+            📊 Call Analytics →
+          </a>
 
           <button
             onClick={fetchTickets}

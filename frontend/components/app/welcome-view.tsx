@@ -85,12 +85,20 @@ export function WelcomeView({
               Tap above to speak with Priya in English, Hindi, or Hinglish
             </p>
 
-            <a
-              href="/escalations"
-              className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold text-amber-600 transition-all hover:bg-amber-500/20 dark:text-amber-400"
-            >
-              View Escalation Dashboard →
-            </a>
+            <div className="mt-5 flex w-full max-w-xs flex-col gap-2.5">
+              <a
+                href="/dashboard"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-xs font-bold tracking-wide text-emerald-600 shadow-sm transition-all hover:scale-[1.02] hover:bg-emerald-500/20 active:scale-95 dark:text-emerald-400"
+              >
+                📊 Call Analytics Dashboard →
+              </a>
+              <a
+                href="/escalations"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-5 py-2.5 text-xs font-bold tracking-wide text-amber-600 shadow-sm transition-all hover:scale-[1.02] hover:bg-amber-500/20 active:scale-95 dark:text-amber-400"
+              >
+                ⚠️ Escalation Support Dashboard →
+              </a>
+            </div>
           </div>
         )}
       </div>

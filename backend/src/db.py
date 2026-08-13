@@ -65,6 +65,28 @@ def init_db(db_path: Optional[Path] = None) -> None:
         with contextlib.suppress(Exception):
             conn.execute("ALTER TABLE callers ADD COLUMN phone TEXT")
     init_escalation_table(db_path)
+    init_call_outcomes_table(db_path)
+
+
+def init_call_outcomes_table(db_path: Optional[Path] = None) -> None:
+    """Initialize the call_outcomes table in SQLite."""
+    with get_db(db_path) as conn, conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS call_outcomes (
+                call_id TEXT PRIMARY KEY,
+                room_name TEXT NOT NULL,
+                seller_id TEXT,
+                outbound INTEGER DEFAULT 0,
+                outcome TEXT NOT NULL,
+                reason TEXT,
+                started_at TEXT NOT NULL,
+                ended_at TEXT NOT NULL,
+                duration_seconds REAL DEFAULT 0.0
+            )
+            """
+        )
+
 
 
 def lookup_seller_db(
@@ -244,3 +266,107 @@ lookup_caller_db = lookup_seller_db
 save_caller_db = save_seller_db
 lookup_seller = lookup_seller_db
 save_seller = save_seller_db
+
+
+def record_call_outcome_db(
+    call_id: str,
+    room_name: str,
+    outcome: str,
+    seller_id: Optional[str] = None,
+    outbound: bool = False,
+    reason: Optional[str] = None,
+    started_at: Optional[str] = None,
+    ended_at: Optional[str] = None,
+    duration_seconds: float = 0.0,
+    db_path: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Insert or update a call outcome record into SQLite database."""
+    target_path = db_path or DEFAULT_DB_PATH
+    init_call_outcomes_table(target_path)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    start_iso = started_at or now_iso
+    end_iso = ended_at or now_iso
+    valid_outcome = "SUCCESS" if str(outcome).upper() == "SUCCESS" else "FAILED"
+
+    with get_db(target_path) as conn, conn:
+        conn.execute(
+            """
+            INSERT INTO call_outcomes (
+                call_id, room_name, seller_id, outbound,
+                outcome, reason, started_at, ended_at, duration_seconds
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(call_id) DO UPDATE SET
+                seller_id=excluded.seller_id,
+                outcome=excluded.outcome,
+                reason=excluded.reason,
+                ended_at=excluded.ended_at,
+                duration_seconds=excluded.duration_seconds
+            """,
+            (
+                call_id,
+                room_name,
+                seller_id,
+                1 if outbound else 0,
+                valid_outcome,
+                reason
+                or (
+                    "Call completed successfully"
+                    if valid_outcome == "SUCCESS"
+                    else "Call condition not met"
+                ),
+                start_iso,
+                end_iso,
+                round(duration_seconds, 2),
+            ),
+        )
+
+    return {
+        "call_id": call_id,
+        "room_name": room_name,
+        "seller_id": seller_id,
+        "outbound": outbound,
+        "outcome": valid_outcome,
+        "reason": reason,
+        "started_at": start_iso,
+        "ended_at": end_iso,
+        "duration_seconds": round(duration_seconds, 2),
+    }
+
+
+def get_call_metrics_db(
+    db_path: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Retrieve call outcome statistics (total, successful, failed) and recent call history."""
+    target_path = db_path or DEFAULT_DB_PATH
+    init_call_outcomes_table(target_path)
+
+    with get_db(target_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as total FROM call_outcomes")
+        total = cursor.fetchone()["total"]
+
+        cursor.execute(
+            "SELECT COUNT(*) as successful FROM call_outcomes WHERE outcome = 'SUCCESS'"
+        )
+        successful = cursor.fetchone()["successful"]
+
+        cursor.execute(
+            "SELECT COUNT(*) as failed FROM call_outcomes WHERE outcome = 'FAILED'"
+        )
+        failed = cursor.fetchone()["failed"]
+
+        cursor.execute(
+            "SELECT * FROM call_outcomes ORDER BY started_at DESC LIMIT 50"
+        )
+        recent_rows = cursor.fetchall()
+        recent_calls = [dict(r) for r in recent_rows]
+
+    return {
+        "total_calls": total,
+        "successful_calls": successful,
+        "failed_calls": failed,
+        "recent_calls": recent_calls,
+    }
+
