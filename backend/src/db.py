@@ -66,6 +66,27 @@ def init_db(db_path: Optional[Path] = None) -> None:
             conn.execute("ALTER TABLE callers ADD COLUMN phone TEXT")
     init_escalation_table(db_path)
     init_call_outcomes_table(db_path)
+    init_refund_claims_table(db_path)
+
+
+def init_refund_claims_table(db_path: Optional[Path] = None) -> None:
+    """Initialize the refund_claims table in SQLite."""
+    with get_db(db_path) as conn, conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS refund_claims (
+                claim_id TEXT PRIMARY KEY,
+                seller_id TEXT NOT NULL,
+                product_name TEXT NOT NULL,
+                issue_type TEXT NOT NULL,
+                refund_amount REAL DEFAULT 0.0,
+                claim_reason TEXT NOT NULL,
+                status TEXT DEFAULT 'APPROVED',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
 
 
 def init_call_outcomes_table(db_path: Optional[Path] = None) -> None:
@@ -369,4 +390,76 @@ def get_call_metrics_db(
         "failed_calls": failed,
         "recent_calls": recent_calls,
     }
+
+
+def create_refund_claim_db(
+    seller_id: str,
+    product_name: str,
+    issue_type: str,
+    refund_amount: float = 0.0,
+    claim_reason: str = "",
+    db_path: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Record a seller return/refund claim in SQLite database."""
+    import uuid
+
+    target_path = db_path or DEFAULT_DB_PATH
+    init_refund_claims_table(target_path)
+
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    date_str = now_dt.strftime("%Y%m%d")
+    claim_id = f"REF-{date_str}-{uuid.uuid4().hex[:6].upper()}"
+
+    with get_db(target_path) as conn, conn:
+        conn.execute(
+            """
+            INSERT INTO refund_claims (
+                claim_id, seller_id, product_name, issue_type,
+                refund_amount, claim_reason, status, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 'APPROVED', ?)
+            """,
+            (
+                claim_id,
+                seller_id,
+                product_name,
+                issue_type,
+                float(refund_amount),
+                claim_reason,
+                now_iso,
+            ),
+        )
+
+    return {
+        "claim_id": claim_id,
+        "seller_id": seller_id,
+        "product_name": product_name,
+        "issue_type": issue_type,
+        "refund_amount": float(refund_amount),
+        "claim_reason": claim_reason,
+        "status": "APPROVED",
+        "created_at": now_iso,
+    }
+
+
+def get_refund_claims_db(
+    seller_id: Optional[str] = None, db_path: Optional[Path] = None
+) -> list[dict[str, Any]]:
+    """Retrieve processed refund claims from SQLite database."""
+    target_path = db_path or DEFAULT_DB_PATH
+    init_refund_claims_table(target_path)
+
+    with get_db(target_path) as conn:
+        cursor = conn.cursor()
+        if seller_id:
+            cursor.execute(
+                "SELECT * FROM refund_claims WHERE seller_id = ? ORDER BY created_at DESC",
+                (seller_id,),
+            )
+        else:
+            cursor.execute("SELECT * FROM refund_claims ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+
 

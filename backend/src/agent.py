@@ -3,8 +3,8 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Optional
-
 
 from dotenv import load_dotenv
 from livekit.agents import (
@@ -19,32 +19,32 @@ from livekit.agents import (
     tokenize,
 )
 
-from datetime import datetime, timezone
-
 try:
     from .agent_prompt import AGENT_NAME, get_system_prompt
     from .catalogue import calculate_order_total_data, lookup_product_data
     from .db import (
         create_escalation_request_db,
-        get_call_metrics_db,
         init_db,
         lookup_seller_db,
         record_call_outcome_db,
         save_seller_db,
     )
     from .inventory import create_restock_request_db
+    from .specialist import RefundSpecialist
+    from .specialist_prompt import SPECIALIST_NAME
 except ImportError:
     from agent_prompt import AGENT_NAME, get_system_prompt
     from catalogue import calculate_order_total_data, lookup_product_data
     from db import (
         create_escalation_request_db,
-        get_call_metrics_db,
         init_db,
         lookup_seller_db,
         record_call_outcome_db,
         save_seller_db,
     )
     from inventory import create_restock_request_db
+    from specialist import RefundSpecialist
+    from specialist_prompt import SPECIALIST_NAME
 
 
 from livekit.plugins import deepgram, google, murf, silero
@@ -494,6 +494,70 @@ class Assistant(Agent):
             return tool_error(
                 "Unable to create support request. Please try again in a few moments."
             )
+
+    @function_tool
+    @log_execution_time
+    async def handoff_to_refund_specialist(
+        self,
+        context: RunContext,
+        reason: str,
+        seller_id: str = "",
+        issue_details: str = "",
+    ) -> dict[str, Any]:
+        """Hand off the conversation to Karan, the Returns and Refunds Specialist.
+
+        MANDATORY: Call this tool whenever the seller or caller asks for:
+        - Product returns, replacement of damaged or expired goods
+        - Refund requests, credit notes, or billing dispute claims
+        - Return policy details or seller reimbursement status.
+
+        Do NOT call this tool for standard product catalogue price lookups or regular stock reorders.
+
+        Args:
+            reason: Why the handoff is occurring (e.g. 'Seller requesting refund for damaged Maggi boxes').
+            seller_id: Seller ID or shop name (if known).
+            issue_details: Brief description of the return/refund request.
+        """
+        if not seller_id:
+            seller_id = self.active_seller_id or ""
+            if not seller_id and hasattr(context, "session") and hasattr(context.session, "state"):
+                seller_state = context.session.state.get("seller", {})
+                if isinstance(seller_state, dict):
+                    seller_id = seller_state.get("name") or seller_state.get("user_id", "")
+
+        logger.info(
+            "Handoff to Refund Specialist (%s) for %s. Reason: %s",
+            SPECIALIST_NAME,
+            seller_id or "seller",
+            reason,
+        )
+
+        specialist = RefundSpecialist(
+            seller_id=seller_id,
+            issue_details=issue_details or reason,
+            tts=murf.TTS(
+                voice="Samar",
+                locale="en-IN",
+                style="Conversation",
+                tokenizer=tokenize.basic.SentenceTokenizer(min_sentence_len=2),
+                text_pacing=True,
+            ),
+        )
+
+        if hasattr(context, "session") and hasattr(context.session, "update_agent"):
+            context.session.update_agent(specialist)
+
+        self.business_action_completed = True
+
+        return {
+            "success": True,
+            "handoff": True,
+            "specialist": SPECIALIST_NAME,
+            "seller_id": seller_id,
+            "announcement": f"Main aapko hamare Returns aur Refunds specialist {SPECIALIST_NAME} se connect kar rahi hoon.",
+            "message": f"Transferred to {SPECIALIST_NAME}, Returns and Refunds Specialist.",
+        }
+
 
 
 server = AgentServer()
