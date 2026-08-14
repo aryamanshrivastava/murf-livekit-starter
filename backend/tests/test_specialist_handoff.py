@@ -130,3 +130,40 @@ async def test_specialist_handoff_path():
         assert "handoff_to_refund_specialist" in tool_calls, f"Refund request should call handoff_to_refund_specialist. Calls made: {tool_calls}"
         assert type(session.current_agent).__name__ == "RefundSpecialist", "Active agent should switch to RefundSpecialist"
 
+
+@pytest.mark.asyncio
+async def test_specialist_handoff_back_to_priya():
+    """Test that Karan hands off back to Priya when user asks standard catalogue or order queries."""
+    assistant = Assistant()
+
+    async with (
+        _llm() as llm_inst,
+        AgentSession(llm=llm_inst) as session,
+    ):
+        await session.start(assistant)
+
+        # 1. Establish identity with Priya
+        await session.run(
+            user_input="Namaste! My shop is Ramesh Store."
+        )
+
+        # 2. Trigger handoff to Karan (Refund Specialist)
+        await session.run(
+            user_input="I received 5 damaged packets of Maggi. I want a refund."
+        )
+        assert type(session.current_agent).__name__ == "RefundSpecialist", "Agent should be Karan"
+
+        # 3. User asks standard catalogue question -> Should trigger handoff back to Priya
+        result = await session.run(
+            user_input="Thank you Karan! Now can you take me back to Priya? I want to place a new order for Amul Butter."
+        )
+
+        tool_calls = [
+            getattr(ev.item, "name", "")
+            for ev in result.events
+            if type(ev).__name__ == "FunctionCallEvent"
+        ]
+
+        assert "handoff_to_main_assistant" in tool_calls, f"Catalogue request while with Karan should call handoff_to_main_assistant. Calls made: {tool_calls}"
+        assert type(session.current_agent).__name__ == "Assistant", "Active agent should switch back to Priya (Assistant)"
+

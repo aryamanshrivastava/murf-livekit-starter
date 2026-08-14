@@ -111,6 +111,9 @@ class Assistant(Agent):
         seller_phone: Optional[str] = None,
         product: Optional[str] = None,
         coverage_days: Optional[float] = None,
+        seller_identified: bool = False,
+        chat_ctx: Optional[Any] = None,
+        is_handoff_return: bool = False,
     ) -> None:
         self.outbound = outbound
         self.seller_name = seller_name
@@ -118,11 +121,26 @@ class Assistant(Agent):
         self.product = product
         self.coverage_days = coverage_days
 
-        self.seller_identified: bool = False
+        self.seller_identified: bool = seller_identified or bool(seller_name)
         self.business_action_completed: bool = False
         self.active_seller_id: Optional[str] = seller_name
+        self.is_handoff_return: bool = is_handoff_return
 
-        super().__init__(instructions=get_system_prompt())
+        super().__init__(instructions=get_system_prompt(), chat_ctx=chat_ctx)
+
+    async def on_enter(self) -> None:
+        """Triggered automatically by LiveKit when Priya enters or is handed back the call."""
+        if self.is_handoff_return and hasattr(self, "session") and self.session:
+            self.session.generate_reply(
+                instructions=(
+                    f"You are Priya, Daily Bazaar's main seller assistant. "
+                    f"You have just taken the call back from Karan for seller {self.seller_name or 'the seller'}. "
+                    f"The seller is ALREADY identified as {self.seller_name or 'the seller'}. "
+                    "Do NOT ask for their shop name again under any circumstances! "
+                    "Welcome the seller back warmly as Priya, acknowledge that Karan handled their return/refund claim, "
+                    "and ask how you can help them with their catalogue, new orders, or kirana store business."
+                )
+            )
 
     @function_tool
     @log_execution_time
@@ -532,9 +550,24 @@ class Assistant(Agent):
             reason,
         )
 
+        # Look up catalogue prices for any product mentioned in the issue
+        catalogue_price_info = ""
+        full_text = f"{reason} {issue_details}"
+        try:
+            for p in ["Maggi", "Amul Milk", "Fortune Oil", "Aashirvaad Atta"]:
+                if p.lower() in full_text.lower():
+                    c_data = lookup_product_data(p)
+                    if c_data.get("product") and "price" in c_data:
+                        catalogue_price_info += f" [Catalogue Unit Price for {c_data['product']}: ₹{c_data['price']} per unit, available stock: {c_data.get('stock')}]"
+        except Exception as e:
+            logger.warning("Unable to fetch catalogue price info during handoff: %s", e)
+
+        specialist_issue_details = (issue_details or reason) + catalogue_price_info
+
         specialist = RefundSpecialist(
             seller_id=seller_id,
-            issue_details=issue_details or reason,
+            issue_details=specialist_issue_details,
+            chat_ctx=self.chat_ctx,
             tts=murf.TTS(
                 voice="Samar",
                 locale="en-IN",
@@ -546,6 +579,25 @@ class Assistant(Agent):
 
         if hasattr(context, "session") and hasattr(context.session, "update_agent"):
             context.session.update_agent(specialist)
+            if hasattr(context.session, "generate_reply"):
+                import asyncio
+
+                async def _karan_speak_greeting():
+                    await asyncio.sleep(0.15)
+                    try:
+                        context.session.generate_reply(
+                            instructions=(
+                                f"You are Karan, Returns & Refunds Specialist. "
+                                f"You have just taken over the call from Priya for seller {seller_id or 'the seller'}. "
+                                f"Greet them politely as Karan in Hindi/Hinglish (e.g. 'Namaste! Main Karan hoon, Daily Bazaar ka Returns specialist.'), "
+                                f"acknowledge their return/refund issue ({issue_details or reason}), "
+                                "and ask how you can assist them."
+                            )
+                        )
+                    except Exception as err:
+                        logger.warning("Unable to trigger automatic speech greeting for Karan: %s", err)
+
+                _task = asyncio.create_task(_karan_speak_greeting())  # noqa: RUF006
 
         self.business_action_completed = True
 
